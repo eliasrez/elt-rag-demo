@@ -2,6 +2,9 @@
 
 This project demonstrates an end-to-end pipeline for **ELT (Extract-Load-Transform)** and **RAG (Retrieval-Augmented Generation)** using Azure Cognitive Search, OpenAI, and structured/unstructured sample data.  
 
+The project also demonstrate use of Terraform (i.e Infrastructure as code) and use of Azure Key Vault for storing Azure search 
+and OpenAI API keys.
+
 The goal is to showcase how to:
 - Ingest both PDFs and CSVs into a data pipeline
 - Transform and embed data
@@ -9,9 +12,13 @@ The goal is to showcase how to:
 - Build a simple retrieval + LLM layer for Q&A and insights
 - Deploy infrastructure with Terraform
 
-The project also demonstrate use of Terraform (i.e Infrastructure as code) and use of Azure Key Vault for storing Azure search 
-and OpenAI API keys.
+
 ---
+
+## Simple demo UX
+![alt text][screenshot]
+
+[screenshot]: https://github.com/eliasrez/elt-rag-demo/blob/main/frontend/my-search-app/public/screenshot1.png "UX Screenshot"
 
 ## 📁 Project Structure
 
