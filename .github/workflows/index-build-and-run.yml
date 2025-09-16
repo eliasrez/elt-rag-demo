@@ -1,0 +1,113 @@
+name: Build, Push, Upload Data, Run Indexer
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login to ACR
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Set image name
+        id: vars
+        run: echo "::set-output name=image::${{ secrets.ACR_NAME }}.azurecr.io/rag-indexer:${GITHUB_SHA::8}"
+
+      - name: Build and push Docker image
+        id: build
+        run: |
+          IMAGE=${{ steps.vars.outputs.image }}
+          docker build -t $IMAGE -f csharp/api/Dockerfile .
+          docker push $IMAGE
+          echo "::set-output name=image::$IMAGE"
+
+  upload-data:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Upload sample data to Blob Storage
+        run: |
+          STORAGE_ACCOUNT=${{ secrets.STORAGE_ACCOUNT }}
+          CONTAINER=${{ secrets.STORAGE_CONTAINER }}
+          # Upload everything in sample_data
+          az storage blob upload-batch --account-name $STORAGE_ACCOUNT -d $CONTAINER -s sample_data
+
+  run-indexer:
+    needs: upload-data
+    runs-on: ubuntu-latest
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy transient ACI to run indexer
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+          RG: ${{ secrets.RESOURCE_GROUP }}
+          LOCATION: ${{ secrets.LOCATION }}
+          ACR_NAME: ${{ secrets.ACR_NAME }}
+          STORAGE_ACCOUNT: ${{ secrets.STORAGE_ACCOUNT }}
+          STORAGE_CONTAINER: ${{ secrets.STORAGE_CONTAINER }}
+          SEARCH_ENDPOINT: ${{ secrets.SEARCH_ENDPOINT }}
+          SEARCH_ADMIN_KEY: ${{ secrets.SEARCH_ADMIN_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          OPENAI_ENDPOINT: ${{ secrets.OPENAI_ENDPOINT }}
+        run: |
+          NAME="rag-indexer-job-${GITHUB_RUN_ID}"
+          echo "Creating container group $NAME in $RG..."
+          # Create the container group with environment variables
+          az container create \
+            --resource-group $RG \
+            --name $NAME \
+            --image $IMAGE \
+            --cpu 1 --memory 2 \
+            --environment-variables \
+              AZURE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT \
+              AZURE_STORAGE_CONTAINER=$STORAGE_CONTAINER \
+              AZURE_SEARCH_ENDPOINT=$SEARCH_ENDPOINT \
+              AZURE_SEARCH_ADMIN_KEY="$SEARCH_ADMIN_KEY" \
+              AZURE_OPENAI_KEY="$OPENAI_KEY" \
+              AZURE_OPENAI_ENDPOINT="$OPENAI_ENDPOINT" \
+            --location $LOCATION \
+            --restart-policy Never
+
+          # Wait for container to finish (polling)
+          echo "Waiting for container to finish..."
+          for i in $(seq 1 120); do
+            STATUS=$(az container show --resource-group $RG --name $NAME --query "instanceView.state" -o tsv)
+            echo "Status: $STATUS"
+            if [[ "$STATUS" == "Terminated" || "$STATUS" == "Succeeded" || "$STATUS" == "Failed" ]]; then
+              break
+            fi
+            sleep 10
+          done
+
+          # Show logs
+          echo "Container logs:"
+          az container logs --resource-group $RG --name $NAME
+
+          # Optionally delete container group
+          az container delete --resource-group $RG --name $NAME --yes --no-wait || true

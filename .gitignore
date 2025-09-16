@@ -1,0 +1,14 @@
+infra/.terraform.tfstate
+infra/.terraform.tfstate.backup
+infra/terraform/.terraform/
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
+infra/terraform/.terraform.lock.hcl
+infra/tfplan
+infra/plan.json
+
+__pycache__/
+# Local .env files
+*.env
+
+useful_commands.txt

@@ -1,0 +1,4 @@
+query,expected_answer,expected_source
+"What is the reimbursement policy for travel expenses?","Employees are reimbursed for reasonable travel costs when approved by their manager.","contoso_policy.pdf"
+"List the details of product ABC123","Product ABC123 is a red laptop with 16GB RAM and 512GB SSD.","products.csv"
+"Does the company cover dental insurance?","Yes, dental insurance is included in the health plan.","contoso_health.pdf"
